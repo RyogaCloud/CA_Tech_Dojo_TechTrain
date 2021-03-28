@@ -2,7 +2,7 @@ CREATE DATABASE IF NOT EXISTS ca_mission;
 
 USE ca_mission;
 
-CREATE TABLE IF NOT EXISTS user (
+CREATE TABLE IF NOT EXISTS users (
     id int NOT NULL AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(50) NOT NULL,
     token VARCHAR(100) NOT NULL,
@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS user (
 );
 
 INSERT INTO
-    user (name, token)
+    users (name, token)
 VALUES
     ("test1", "aaaa"),
     ("test2", "bbbb"),
