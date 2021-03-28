@@ -1,8 +1,7 @@
-CREATE TABLE Comment
+CREATE TABLE users
 (
     id int NOT NULL AUTO_INCREMENT,
-    title varchar(32) NOT NULL,
-    category varchar(32) NOT NULL,
-    content varchar(256) NOT NULL,
+    name varchar(32) NOT NULL,
+    token varchar(32) NOT NULL,
     PRIMARY KEY(id)
 );

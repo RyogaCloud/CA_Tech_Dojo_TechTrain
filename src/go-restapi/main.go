@@ -13,7 +13,7 @@ import (
 type User struct {
 	gorm.Model
 	Name  string
-	Email string
+	Token string
 }
 
 func main() {
@@ -38,9 +38,9 @@ func main() {
 	router.POST("/new", func(ctx *gin.Context) {
 		db := sqlConnect()
 		name := ctx.PostForm("name")
-		email := ctx.PostForm("email")
-		fmt.Println("create user " + name + " with email " + email)
-		db.Create(&User{Name: name, Email: email})
+		token := ctx.PostForm("token")
+		fmt.Println("create user " + name + " with token " + token)
+		db.Create(&User{Name: name, Token: token})
 		defer db.Close()
 
 		ctx.Redirect(302, "/")
