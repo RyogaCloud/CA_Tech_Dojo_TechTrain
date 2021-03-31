@@ -9,6 +9,7 @@ require (
 	github.com/go-playground/validator/v10 v10.4.1 // indirect
 	github.com/go-sql-driver/mysql v1.5.0 // indirect
 	github.com/golang/protobuf v1.5.1 // indirect
+	github.com/google/uuid v1.2.0 // indirect
 	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/jinzhu/gorm v1.9.16 // indirect
 	github.com/json-iterator/go v1.1.10 // indirect

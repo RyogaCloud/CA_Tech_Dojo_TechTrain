@@ -10,6 +10,7 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/jinzhu/gorm"
 )
@@ -20,9 +21,9 @@ type User struct {
 	Token string
 }
 
-type ReqCreateUserJSON struct {
-	Name string `json:"name" validate:"required"`
-}
+// type ReqCreateUserJSON struct {
+// 	Name string `json:"name" validate:"required"`
+// }
 
 type ResCreateUserJSON struct {
 	Token string `json:"token"`
@@ -32,9 +33,9 @@ type ResGetUserJSON struct {
 	Name string `json:"name"`
 }
 
-type ReqUpdateUserJSON struct {
-	Name string `json:"name" validate:"required"`
-}
+// type ReqUpdateUserJSON struct {
+// 	Name string `json:"name" validate:"required"`
+// }
 
 func sqlConnect() (database *gorm.DB) {
 	DBMS := "mysql"
@@ -66,22 +67,26 @@ func sqlConnect() (database *gorm.DB) {
 	return db
 }
 
-// UserTokenをunixtimeから生成して返す関数
-func GenerateUserToken() string {
+// // UserTokenをunixtimeから生成して返す関数
+// func GenerateUserToken() string {
+// 	//生成したuuidが被っていないかチェックするようにした方が良いかも
+// 	unixtime := strconv.FormatInt(time.Now().Unix(), 10)
+// 	return unixtime
+// }
+
+// uuidを生成して返す関数
+func GenerateUserToken() (string, error) {
 	//生成したuuidが被っていないかチェックするようにした方が良いかも
-	unixtime := strconv.FormatInt(time.Now().Unix(), 10)
-	return unixtime
+	uuid, err := uuid.NewRandom()
+	return uuid.String(), err
 }
 
 func HandlerFunc(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "hello world.")
-	// header := r.Header
-	// fmt.Println(header)
 }
 
 func CreateUser(w http.ResponseWriter, r *http.Request) {
-	// JSONに変換
-	var userCreate ReqCreateUserJSON
+	// POSTされたデータをJSONに変換
 	length, err := strconv.Atoi(r.Header.Get("Content-Length"))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -93,26 +98,32 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	var jsonBody map[string]interface{}
-	err = json.Unmarshal(body[:length], &jsonBody)
+	var reqCreateUserJSON map[string]interface{}
+	err = json.Unmarshal(body[:length], &reqCreateUserJSON)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	// MySQLへデータを格納
+	token, err := GenerateUserToken()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 	user := User{
-		Name:  jsonBody["name"].(string),
-		Token: GenerateUserToken(),
+		Name:  reqCreateUserJSON["name"].(string),
+		Token: token,
 	}
 	db := sqlConnect()
-	db.AutoMigrate(&user)
+	db.AutoMigrate(&User{})
 	defer db.Close()
 	db.NewRecord(&user)
 	db.Create(&user)
 
 	// 返り値の設定
-	userCreate.Name = jsonBody["name"].(string)
+	// var userCreate ResCreateUserJSON
+	// userCreate.Name = jsonBody["name"].(string)
 	w.Header().Set("Content-Type", "application/json;charset=utf-8")
 	w.WriteHeader(http.StatusCreated)
 	err = json.NewEncoder(w).Encode(
@@ -124,72 +135,73 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// func GetUser(w http.ResponseWriter, r *http.Request) {
-// 	fmt.Println(r.Header.Get("x-token"))
+func GetUser(w http.ResponseWriter, r *http.Request) {
+	// MySQLからデータを取得
+	var user User
+	db := sqlConnect()
+	db.AutoMigrate(&User{})
+	defer db.Close()
+	db.Where("token = ?", r.Header.Get("x-token")).First(&user)
 
-// 	if err := userUsecase.Get(m); err != nil {
-// 		log.Fatal(err)
-// 		writeError(w, http.StatusInternalServerError, apierror.ErrInternalServerError)
-// 		return
-// 	}
+	// 返り値の設定
+	w.Header().Set("Content-Type", "application/json;charset=utf-8")
+	w.WriteHeader(http.StatusCreated)
+	err := json.NewEncoder(w).Encode(
+		&ResGetUserJSON{
+			Name: user.Name,
+		})
+	if err != nil {
+		log.Fatal(err)
+	}
+}
 
-// 	w.Header().Set("Content-Type", "application/json;charset=utf-8")
-// 	w.WriteHeader(http.StatusOK)
+func UpdateUser(w http.ResponseWriter, r *http.Request) {
+	// PUTされたデータをJSONに変換
+	length, err := strconv.Atoi(r.Header.Get("Content-Length"))
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	body := make([]byte, length)
+	length, err = r.Body.Read(body)
+	if err != nil && err != io.EOF {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	var reqUpdateUserJSON map[string]interface{}
+	err = json.Unmarshal(body[:length], &reqUpdateUserJSON)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 
-// 	if err := json.NewEncoder(w).Encode(&ResGetUserJSON{
-// 		Name: m.Name,
-// 	}); err != nil {
-// 		log.Fatal(err)
-// 	}
-// }
+	// MySQLのデータをアップデート
+	// user := User{
+	// 	Name:  jsonBody["name"].(string),
+	// 	Token: r.Header.Get("x-token"),
+	// }
+	db := sqlConnect()
+	db.AutoMigrate(&User{})
+	defer db.Close()
+	db.Model(&User{}).Where("token = ?", r.Header.Get("x-token")).Update("name", reqUpdateUserJSON["name"].(string))
 
-// func UpdateUser(w http.ResponseWriter, r *http.Request) {
-// 	//jsonからgoの構造体にデコードする
-// 	var user ReqUpdateUserJSON
-// 	//http通信などのストリームデータをデコード
-// 	err := json.NewDecoder(r.Body).Decode(&user)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 		return
-// 	}
-
-// 	//バリデーション
-// 	validate := validator.New()
-// 	err = validate.Struct(&user)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 		return
-// 	}
-
-// 	m := &model.User{
-// 		Name:  user.Name,
-// 		Token: r.Header.Get("x-token"),
-// 	}
-
-// 	err = userUsecase.Update(m)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 		writeError(w, http.StatusInternalServerError, apierror.ErrInternalServerError)
-// 		return
-// 	}
-
-// 	w.Header().Set("Content-Type", "application/json;charset=utf-8")
-// 	w.WriteHeader(http.StatusNoContent)
-// }
+	// 返り値の設定
+	// var userCreate ReqCreateUserJSON
+	// userCreate.Name = jsonBody["name"].(string)
+	w.Header().Set("Content-Type", "application/json;charset=utf-8")
+	w.WriteHeader(http.StatusCreated)
+}
 
 func main() {
 	fmt.Println("Starting Server at http://localhost:8080")
-	// db := sqlConnect()
-	// db.AutoMigrate(&User{})
-	// defer db.Close()
 
 	router := mux.NewRouter()
 	router.HandleFunc("/test", HandlerFunc)
 
 	subrouterUser := router.PathPrefix("/user").Subrouter()
 	subrouterUser.HandleFunc("/create", CreateUser).Methods("POST")
-	// subrouterUser.HandleFunc("/get", GetUser).Methods("GET")
-	// subrouterUser.HandleFunc("/update", UpdateUser).Methods("PUT")
+	subrouterUser.HandleFunc("/get", GetUser).Methods("GET")
+	subrouterUser.HandleFunc("/update", UpdateUser).Methods("PUT")
 	router.Handle("/", router)
 	http.ListenAndServe(":8080", router)
 }
