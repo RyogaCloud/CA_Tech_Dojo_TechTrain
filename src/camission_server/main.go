@@ -15,28 +15,47 @@ import (
 	"github.com/jinzhu/gorm"
 )
 
+// usersテーブルにおける各データの形
 type User struct {
 	gorm.Model
 	Name  string
 	Token string
 }
 
-// type ReqCreateUserJSON struct {
-// 	Name string `json:"name" validate:"required"`
-// }
+// charactersテーブルにおける各データの形
+type Character struct {
+	gorm.Model
+	Name        string
+	Probability int
+}
 
+// ユーザ情報作成APIで返す形
+type ReqCreateUserJSON struct {
+	Name string `json:"name"`
+}
+
+// ユーザ情報作成APIで返す形
 type ResCreateUserJSON struct {
 	Token string `json:"token"`
 }
 
+// ユーザ情報取得APIで返す形
 type ResGetUserJSON struct {
 	Name string `json:"name"`
 }
 
-// type ReqUpdateUserJSON struct {
-// 	Name string `json:"name" validate:"required"`
-// }
+// ガチャ実行APIで返す形
+type ResGachaJSON struct {
+	Results []ResultGachaJSON `json:"results"`
+}
 
+// ガチャ実行APIでガチャの結果を格納する形
+type ResultGachaJSON struct {
+	CharacterID int    `json:"characterID"`
+	Name        string `json:"name"`
+}
+
+// MySQLと接続する関数
 func sqlConnect() (database *gorm.DB) {
 	DBMS := "mysql"
 	USER := "go_test"
@@ -67,13 +86,6 @@ func sqlConnect() (database *gorm.DB) {
 	return db
 }
 
-// // UserTokenをunixtimeから生成して返す関数
-// func GenerateUserToken() string {
-// 	//生成したuuidが被っていないかチェックするようにした方が良いかも
-// 	unixtime := strconv.FormatInt(time.Now().Unix(), 10)
-// 	return unixtime
-// }
-
 // uuidを生成して返す関数
 func GenerateUserToken() (string, error) {
 	//生成したuuidが被っていないかチェックするようにした方が良いかも
@@ -81,6 +93,7 @@ func GenerateUserToken() (string, error) {
 	return uuid.String(), err
 }
 
+// Hello worldを出力する関数
 func HandlerFunc(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "hello world.")
 }
@@ -105,25 +118,27 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// MySQLへデータを格納
+	// usersテーブルへデータを格納
 	token, err := GenerateUserToken()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	// ca_missionのMySQLに接続
+	db := sqlConnect()
+	db.AutoMigrate(&User{})
+	defer db.Close()
+
+	// usersテーブルにデータを格納
 	user := User{
 		Name:  reqCreateUserJSON["name"].(string),
 		Token: token,
 	}
-	db := sqlConnect()
-	db.AutoMigrate(&User{})
-	defer db.Close()
-	db.NewRecord(&user)
-	db.Create(&user)
+	db.Table("users").NewRecord(&user)
+	db.Table("users").Create(&user)
 
 	// 返り値の設定
-	// var userCreate ResCreateUserJSON
-	// userCreate.Name = jsonBody["name"].(string)
 	w.Header().Set("Content-Type", "application/json;charset=utf-8")
 	w.WriteHeader(http.StatusCreated)
 	err = json.NewEncoder(w).Encode(
@@ -136,12 +151,14 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func GetUser(w http.ResponseWriter, r *http.Request) {
-	// MySQLからデータを取得
-	var user User
+	// ca_missionのMySQLに接続
 	db := sqlConnect()
 	db.AutoMigrate(&User{})
 	defer db.Close()
-	db.Where("token = ?", r.Header.Get("x-token")).First(&user)
+
+	// usersテーブルからtokenが一致するデータを取得
+	var user User
+	db.Table("users").Where("token = ?", r.Header.Get("x-token")).First(&user)
 
 	// 返り値の設定
 	w.Header().Set("Content-Type", "application/json;charset=utf-8")
@@ -175,33 +192,62 @@ func UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// MySQLのデータをアップデート
-	// user := User{
-	// 	Name:  jsonBody["name"].(string),
-	// 	Token: r.Header.Get("x-token"),
-	// }
+	// ca_missionのMySQLに接続
 	db := sqlConnect()
 	db.AutoMigrate(&User{})
 	defer db.Close()
-	db.Model(&User{}).Where("token = ?", r.Header.Get("x-token")).Update("name", reqUpdateUserJSON["name"].(string))
+
+	// usersテーブルを書き換える
+	db.Table("users").Model(&User{}).Where("token = ?", r.Header.Get("x-token")).Update("name", reqUpdateUserJSON["name"].(string))
 
 	// 返り値の設定
-	// var userCreate ReqCreateUserJSON
-	// userCreate.Name = jsonBody["name"].(string)
 	w.Header().Set("Content-Type", "application/json;charset=utf-8")
 	w.WriteHeader(http.StatusCreated)
 }
 
+func DrawGacha(w http.ResponseWriter, r *http.Request) {
+	// POSTされたデータをJSONに変換
+	length, err := strconv.Atoi(r.Header.Get("Content-Length"))
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	body := make([]byte, length)
+	length, err = r.Body.Read(body)
+	if err != nil && err != io.EOF {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	var reqDrawGachaJSON map[string]interface{}
+	err = json.Unmarshal(body[:length], &reqDrawGachaJSON)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// ca_missionのMySQLに接続
+	db := sqlConnect()
+	db.AutoMigrate(&User{})
+	defer db.Close()
+
+	// 取得キャラクターを配列に格納
+	var resultsGacha []ResultGachaJSON
+	// ガチャの実行
+}
+
 func main() {
+	// 起動したサーバURLの表示
 	fmt.Println("Starting Server at http://localhost:8080")
 
+	// ルーティングの作成
 	router := mux.NewRouter()
 	router.HandleFunc("/test", HandlerFunc)
-
 	subrouterUser := router.PathPrefix("/user").Subrouter()
 	subrouterUser.HandleFunc("/create", CreateUser).Methods("POST")
 	subrouterUser.HandleFunc("/get", GetUser).Methods("GET")
 	subrouterUser.HandleFunc("/update", UpdateUser).Methods("PUT")
+	subrouterGacha := router.PathPrefix("/gacha").Subrouter()
+	subrouterGacha.HandleFunc("/draw", DrawGacha).Methods("POST")
 	router.Handle("/", router)
 	http.ListenAndServe(":8080", router)
 }
